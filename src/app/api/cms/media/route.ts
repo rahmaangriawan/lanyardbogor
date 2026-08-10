@@ -33,9 +33,7 @@ async function ensureMediaTable() {
     mediaTableReady = true;
     return true;
   } catch (error) {
-    if (!isMissingMediaTableError(error)) {
-      throw error;
-    }
+    console.warn("Media table unavailable; using filesystem storage.", error);
     return false;
   }
 }
@@ -101,6 +99,21 @@ function detectImageMime(buffer: Buffer) {
   )
     return "image/gif";
   return null;
+}
+
+function extensionForImageMime(mimetype: string) {
+  switch (mimetype) {
+    case "image/jpeg":
+      return ".jpg";
+    case "image/png":
+      return ".png";
+    case "image/webp":
+      return ".webp";
+    case "image/avif":
+      return ".avif";
+    default:
+      return ".bin";
+  }
 }
 
 export async function GET(request: Request) {
@@ -276,23 +289,30 @@ export async function POST(request: Request) {
     // Sanitize filename
     const originalName = file.name;
     const sanitizedBase = sanitizeFilenameBase(originalName);
-    const uniqueFilename = `${sanitizedBase}-${crypto.randomUUID()}.webp`;
-
     let outputBuffer: Buffer<ArrayBufferLike> = originalBuffer;
-    let outputMimeType = "image/webp";
+    let outputMimeType = detectedType;
+    let outputExtension = extensionForImageMime(detectedType);
 
-    const { default: sharp } = await import("sharp");
+    try {
+      const { default: sharp } = await import("sharp");
 
-    outputBuffer = await sharp(originalBuffer)
-      .rotate()
-      .resize({
-        width: 1920,
-        height: 1920,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .webp({ quality: 82 })
-      .toBuffer();
+      outputBuffer = await sharp(originalBuffer)
+        .rotate()
+        .resize({
+          width: 1920,
+          height: 1920,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .webp({ quality: 82 })
+        .toBuffer();
+      outputMimeType = "image/webp";
+      outputExtension = ".webp";
+    } catch (error) {
+      console.warn("Sharp conversion unavailable; storing the original image.", error);
+    }
+
+    const uniqueFilename = `${sanitizedBase}-${crypto.randomUUID()}${outputExtension}`;
 
     // Path resolution
     const uploadDir = await resolveUploadsRoot();

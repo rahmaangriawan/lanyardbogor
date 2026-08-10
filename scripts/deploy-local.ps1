@@ -74,7 +74,8 @@ Run-Step "Prepare standalone archive" {
     Copy-Item -Path $restartScript -Destination (Join-Path $scratchDir "restart.sh") -Force
   }
 
-  Compress-Archive -Path (Join-Path $scratchDir "*") -DestinationPath $archivePath -Force
+  # Use native tar instead of Compress-Archive because Compress-Archive fails silently on long paths (>260 chars) common in node_modules
+  tar -acf $archivePath -C $scratchDir .
 }
 
 $remote = "$UserName@$HostName"
